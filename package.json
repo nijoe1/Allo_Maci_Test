@@ -1,0 +1,24 @@
+{
+  "name": "hardhat-project",
+  "scripts": {
+    "compile": "hardhat compile",
+    "compileSol": "TS_NODE_TRANSPILE_ONLY=1 ts-node ./scripts/compileSol.ts",
+    "test:solidity": "hardhat test --network sepolia",
+    "test:live": "hardhat test --network localhost",
+    "prettier:write": "prettier --write . --write **/*"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts-upgradeable": "^5.0.2",
+    "@openzeppelin/hardhat-upgrades": "^3.1.0",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.12.12",
+    "chai": "^4.4.1",
+    "hardhat": "^2.22.4",
+    "ipfs-only-hash": "^4.0.0",
+    "maci-cli": "^1.2.2",
+    "maci-contracts": "^1.2.2",
+    "typescript": "^5.4.5"
+  }
+}
