@@ -68,7 +68,16 @@ async function main() {
   async function generateProofsAndSubmit() {
     const tallyFile = getTalyFilePath(outputDir);
 
-    const { processZkFile, tallyZkFile, processWitness, processWasm, tallyWitness, tallyWasm } = getCircuitFiles("micro", circuitDirectory);
+    const {
+      processZkFile,
+      tallyZkFile,
+      processWitness,
+      processWasm,
+      tallyWitness,
+      tallyWasm,
+      processDatFile,
+      tallyDatFile,
+    } = getCircuitFiles("micro", circuitDirectory);
 
     await genProofs({
       outputDir,
@@ -78,11 +87,11 @@ async function main() {
       pollId: 0n,
       rapidsnark: undefined,
       processWitgen: processWitness,
-      processDatFile: undefined,
+      processDatFile: processDatFile,
       tallyWitgen: tallyWitness,
-      tallyDatFile: undefined,
+      tallyDatFile: tallyDatFile,
       coordinatorPrivKey: CoordinatorKeypair.privKey.serialize(),
-      maciAddress:maciContractAddress,
+      maciAddress: maciContractAddress,
       transactionHash: undefined,
       processWasm,
       tallyWasm,
@@ -105,6 +114,7 @@ async function main() {
       messageProcessorAddress:mpContractAddress,
       tallyAddress: tallyContractAddress,
       signer: Coordinator,
+      subsidyEnabled: false,
       quiet: true,
     });
   }

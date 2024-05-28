@@ -80,6 +80,11 @@ contract Constants {
     /// @param sender The sender of the transaction
     event RecipientStatusUpdated(uint256 indexed rowIndex, uint256 fullRow, address sender);
 
+    /// @notice Emitted when a recipient is registered and the status is updated
+    /// @param recipientId The recipientId 
+    /// @param status The status of the review
+    /// @param sender The sender of the transaction
+    event RecipientStatusUpdated(address indexed recipientId, IStrategy.Status status, address sender);
 
     /// @notice Emitted when funds are distributed to a recipient
     /// @param amount The amount of tokens distributed
@@ -121,6 +126,18 @@ contract Constants {
     event UpdatedRegistration(
         address indexed recipientId,
         uint256 applicationId,
+        bytes data,
+        address sender,
+        IStrategy.Status status
+    );
+
+    /// @notice Emitted when a recipient updates their registration
+    /// @param recipientId ID of the recipient
+    /// @param data The encoded data - (address recipientId, address recipientAddress, Metadata metadata)
+    /// @param sender The sender of the transaction
+    /// @param status The updated status of the recipient
+    event UpdatedRegistration(
+        address indexed recipientId,
         bytes data,
         address sender,
         IStrategy.Status status

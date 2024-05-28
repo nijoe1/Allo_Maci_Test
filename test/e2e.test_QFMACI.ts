@@ -26,7 +26,7 @@ import { JSONFile } from "./utils/JSONFile";
 
 import { getIpfsHash } from "./utils/ipfs";
 
-import { genProofs, proveOnChain, GenProofsArgs } from "maci-cli";
+import { genProofs, GenProofsArgs,proveOnChain } from "maci-cli";
 
 import type { EthereumProvider } from "hardhat/types";
 
@@ -37,12 +37,17 @@ import {
   ClonableTally,
   ClonableMessageProcessor,
   Allo,
-  Dai,
 } from "../typechain-types";
-import { deployTestContracts, timeTravel } from "./utils_qf";
+import { deployTestContracts, timeTravel } from "./utils_qfmaci";
+
+import { genMaciStateFromContract } from "./utils/genMaciState";
 
 import { getTalyFilePath } from "./utils/misc";
 import path from "path";
+
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // MACI zkFiles
 let circuitDirectory = process.env.CIRCUIT_DIRECTORY || "./zkeys/zkeys";
@@ -74,7 +79,6 @@ describe("e2e", function test() {
   let pollContract: ClonablePoll;
   let tallyContract: ClonableTally;
   let AlloContract: Allo;
-  let DAI: Dai;
 
   const UNIT = 10n ** 18n;
 
@@ -92,7 +96,9 @@ describe("e2e", function test() {
   let maciAddress: string;
 
   before(async () => {
-    [Coordinator] = await ethers.getSigners();
+    const signer = new ethers.Wallet(process.env.PRIVATE_KEY!, ethers.provider);
+
+    Coordinator = signer.connect(ethers.provider);
 
     const contracts = await deployTestContracts();
 
@@ -107,7 +113,6 @@ describe("e2e", function test() {
     recipient2 = contracts.user3;
     maciTransactionHash = contracts.maciTransitionHash || "";
     coordinatorKeypair = contracts.CoordinatorKeypair;
-    DAI = contracts.Dai;
 
     recipientAddress1 = await recipient1.getAddress();
     recipientAddress2 = await recipient2.getAddress();
@@ -304,6 +309,23 @@ describe("e2e", function test() {
 
     console.log("Generating proofs");
 
+    const MaciState = (
+      await genMaciStateFromContract(
+        ethers.provider,
+        maciAddress,
+        coordinatorKeypair,
+        0n,
+        0,
+        50,
+        undefined,
+        undefined
+      )
+    ).toJSON();
+
+    // Create file and write the state
+    const stateFilePath = path.join(outputDir, "state.json");
+    JSONFile.write(stateFilePath, MaciState);
+
     const {
       processZkFile,
       tallyZkFile,
@@ -329,7 +351,7 @@ describe("e2e", function test() {
       processWasm: processWasm,
       tallyWasm: tallyWasm,
       useWasm: true,
-      stateFile: undefined,
+      stateFile: stateFilePath,
       startBlock: undefined,
       blocksPerBatch: 50,
       endBlock: undefined,
@@ -350,6 +372,7 @@ describe("e2e", function test() {
       messageProcessorAddress,
       tallyAddress,
       signer: Coordinator,
+      subsidyEnabled: false,
       quiet: true,
     });
 
@@ -390,7 +413,6 @@ describe("e2e", function test() {
 
     console.log("Finished adding tally results");
   });
-  
 
   it("Recipient should have more than 0 votes received", async () => {
     let recipientAddress = await recipient1.getAddress();

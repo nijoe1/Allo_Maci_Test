@@ -20,11 +20,13 @@ import {
   GenProofsArgs,
   genLocalState,
   verify,
+  MergeMessagesArgs,
+  MergeSignupsArgs,
 } from "maci-cli";
 
 import { getTalyFilePath, isPathExist } from "./misc";
 import { getCircuitFiles } from "./circuits";
-import { QFMACI } from "../../typechain-types";
+import { MACIQF, QFMACI } from "../../typechain-types";
 
 import {
   IPublishBatchArgs,
@@ -64,7 +66,7 @@ export async function mergeMaciSubtrees({
     numQueueOps,
     signer,
     quiet,
-  });
+  } as MergeMessagesArgs);
 
   await mergeSignups({
     pollId,
@@ -72,7 +74,7 @@ export async function mergeMaciSubtrees({
     numQueueOps,
     signer,
     quiet,
-  });
+  } as MergeSignupsArgs);
 }
 
 export const publishBatch = async ({
@@ -416,7 +418,7 @@ export function getTallyResultProofBatch(
 }
 
 export async function addTallyResultsBatch(
-  QFMACI: QFMACI,
+  QFMACI: QFMACI | MACIQF,
   recipientTreeDepth: number,
   tallyData: any,
   batchSize: number,

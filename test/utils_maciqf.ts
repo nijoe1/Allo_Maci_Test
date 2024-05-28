@@ -11,7 +11,7 @@ import { Signer } from "ethers";
 import {
   Allo,
   Registry,
-  QFMACI,
+  MACIQF,
   ClonableMACI,
   ClonablePoll,
   ClonableMessageProcessor,
@@ -37,7 +37,7 @@ export const duration = 20;
 
 export interface ITestContracts {
   Allo: Allo;
-  QFMACI_STRATEGY: QFMACI;
+  MACIQF_STRATEGY: MACIQF;
   vkRegistryContract: VkRegistry;
   verifierContract: Verifier;
   maciContract: ClonableMACI;
@@ -222,7 +222,7 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
 
   await setMaciParameters.wait();
 
-  const QVMODE = 1n
+  const QVMODE = 0n
 
   await vkRegistryContract.setVerifyingKeys(
     deployParams.stateTreeDepth,
@@ -235,16 +235,16 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
     deployParams.tallyVk.asContractParam() as IVerifyingKeyStruct
   );
 
-  const QFMACIStrategyFactory = await ethers.getContractFactory("QFMACI");
+  const MACIQFStrategyFactory = await ethers.getContractFactory("MACIQF");
 
-  const QFMACIStrategy = await QFMACIStrategyFactory.deploy(Allo, "QFMACI");
+  const MACIQFStrategy = await MACIQFStrategyFactory.deploy(Allo, "MACIQF");
 
-  const QFMACIStrategyAddress = await QFMACIStrategy.getAddress();
+  const MACIQFStrategyAddress = await MACIQFStrategy.getAddress();
 
   // --------------------------------------------------  Add ClonableMACI to Allo allowed strategies  ----------------------------
 
   const addStrategy = await AlloContracts.Allo.addToCloneableStrategies(
-    QFMACIStrategyAddress
+    MACIQFStrategyAddress
   );
 
   await addStrategy.wait();
@@ -323,7 +323,7 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
 
   const createPool = await AlloContracts.Allo.createPool(
     profileId,
-    QFMACIStrategyAddress,
+    MACIQFStrategyAddress,
     bytes,
     "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
     // AlloContracts.DaiAddress,
@@ -346,11 +346,15 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
 
   const poolAddress = (await AlloContracts.Allo.getPool(1)).strategy;
 
-  const QFMACI_STRATEGY = await ethers.getContractAt("QFMACI", poolAddress);
+  const MACIQF_STRATEGY = await ethers.getContractAt("MACIQF", poolAddress);
 
-  const maci = await QFMACI_STRATEGY._maci();
+  const maci = await MACIQF_STRATEGY._maci();
 
-  const pollContracts = await QFMACI_STRATEGY._pollContracts();
+  const MACI = await ethers.getContractAt("ClonableMACI", maci);
+  const nextPollId = await MACI.nextPollId();
+  console.log("Next Poll Id : ", nextPollId.toString());
+
+  const pollContracts = await MACIQF_STRATEGY._pollContracts();
 
   const signer2 = new ethers.Wallet(
     PRIVATE_KEY_USER1!,
@@ -367,7 +371,7 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
 
   return {
     Allo: AlloContracts.Allo,
-    QFMACI_STRATEGY,
+    MACIQF_STRATEGY,
     vkRegistryContract,
     verifierContract,
     maciContract: (await ethers.getContractAt(

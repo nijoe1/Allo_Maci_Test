@@ -1,17 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.20;
 
-// Importing necessary libraries and contracts
+// MACI Contracts & Libraries
 import {ClonableMACIFactory} from "../../ClonableMaciContracts/ClonableMACIFactory.sol";
 import {DomainObjs} from "maci-contracts/contracts/utilities/DomainObjs.sol";
 import {ClonableMACI} from "../../ClonableMaciContracts/ClonableMACI.sol";
 import {Params} from "maci-contracts/contracts/utilities/Params.sol";
 import {Tally} from "maci-contracts/contracts/Tally.sol";
 import {Poll} from "maci-contracts/contracts/Poll.sol";
+
+// OpenZeppelin
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
+// Core Contracts
 import {IAllo, IERC20, IZuPassVerifier} from "./interfaces/Constants.sol";
 import {MACIQFBase} from "./MACIQFBase.sol";
 
+/// @title MACIQF
+/// @notice This contract handles the quadratic funding mechanism using MACI (Minimal Anti-Collusion Infrastructure).
+/// It extends the MACIQFBase contract and integrates MACI-related functionalities.
 contract MACIQF is MACIQFBase, DomainObjs, Params {
     using EnumerableSet for EnumerableSet.UintSet;
 
@@ -19,38 +26,37 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
     /// ======= Storage ======
     /// ======================
 
-    /// @notice Set of valid event IDs for Zupass users this defines 
-    /// the events that are valid for Zupass users hence the allowlist 
+    /// @notice Set of valid event IDs
     EnumerableSet.UintSet private VALID_EVENT_IDS;
 
-    /// @notice Required number of valid event IDs for validation
+    /// @notice The required number of valid event IDs for a contribution
     uint256 public requiredValidEventIds;
 
-    /// @notice Maximum contribution amount for Zupass users
+    /// @notice The maximum contribution amount for users with Zupass
     uint256 public maxContributionAmountForZupass;
 
-    /// @notice Maximum contribution amount for non-Zupass users
+    /// @notice The maximum contribution amount for users without Zupass
     uint256 public maxContributionAmountForNonZupass;
 
-    /// @notice Struct holding deployed Poll contracts
+    /// @notice Poll contracts for MACI
     ClonableMACI.PollContracts public _pollContracts;
 
-    /// @notice Address of the MACI factory contract
+    /// @notice Address of the MACI factory
     address public maciFactory;
 
-    IZuPassVerifier public zuPassVerifier;
-
+    /// @notice The verifier contract instance
+    IZuPassVerifier public zupassVerifier;
 
     /// ======================
     /// ======= Structs ======
     /// ======================
 
-    /// @notice Struct to hold MACI parameters
+    /// @notice Parameters for initializing MACI
     struct MaciParams {
         address coordinator;
         PubKey coordinatorPubKey;
         address maciFactory;
-        address zuPassVerifier;
+        address verifier;
         uint8 maciId;
         uint256[] validEventIds;
         uint256 requiredValidEventIds;
@@ -58,13 +64,13 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         uint256 maxContributionAmountForNonZupass;
     }
 
-    /// @notice Struct to hold initialization parameters for MACI
+    /// @notice Initialization parameters for the strategy
     struct InitializeParamsMACI {
         InitializeParams initializeParams;
         MaciParams maciParams;
     }
 
-    /// @notice Struct to hold details for claiming funds
+    /// @notice Structure to claim funds
     struct claimFunds {
         uint256 voteOptionIndex;
         uint256 spent;
@@ -78,7 +84,9 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
     /// ========== Constructor =============
     /// ====================================
 
-    /// @notice Constructor to initialize the strategy with Allo address and name
+    /// @notice Initializes the MACIQF contract
+    /// @param _allo The address of the Allo contract
+    /// @param _name The name of the strategy
     constructor(address _allo, string memory _name) MACIQFBase(_allo, _name) {}
 
     /// ====================================
@@ -101,11 +109,15 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         __MACIQFBaseStrategy_init(_poolId, _params.initializeParams);
 
         address strategy = address(allo.getPool(_poolId).strategy);
-        coordinator = _params.maciParams.coordinator;
-        zuPassVerifier = IZuPassVerifier(_params.maciParams.zuPassVerifier);
 
-        for (uint256 i = 0; i < _params.maciParams.validEventIds.length; i++) {
+        coordinator = _params.maciParams.coordinator;
+        zupassVerifier = IZuPassVerifier(_params.maciParams.verifier);
+
+        for (uint i = 0; i < _params.maciParams.validEventIds.length; ) {
             VALID_EVENT_IDS.add(_params.maciParams.validEventIds[i]);
+            unchecked {
+                i++;
+            }
         }
 
         if (_params.maciParams.validEventIds.length < _params.maciParams.requiredValidEventIds) {
@@ -127,35 +139,36 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
 
         _pollContracts = ClonableMACI(_maci).deployPoll(
             _pollDuration,
-            _params.maciParams.coordinatorPubKey
+            _params.maciParams.coordinatorPubKey,
+            Mode.QV
         );
 
         maciFactory = _params.maciParams.maciFactory;
     }
 
     /// =======================================
-    /// ====== Allo related functions =========
+    /// ====== Allo Related Functions =========
     /// =======================================
 
     /// @notice Allocate votes to a recipient
-    /// @param _data The data
+    /// @param _data The data containing allocation details
     /// @param _sender The sender of the transaction
     function _allocate(bytes memory _data, address _sender) internal override {
         (
             PubKey memory pubKey,
             uint256 amount,
-            uint256[2] memory _pA,
-            uint256[2][2] memory _pB,
-            uint256[2] memory _pC,
-            uint256[38] memory _pubSignals
-        ) = abi.decode(_data, (PubKey, uint256, uint256[2], uint256[2][2], uint256[2], uint256[38]));
+            uint[2] memory _pA,
+            uint[2][2] memory _pB,
+            uint[2] memory _pC,
+            uint[38] memory _pubSignals
+        ) = abi.decode(_data, (PubKey, uint256, uint[2], uint[2][2], uint[2], uint[38]));
 
         if (isAddressZero(_maci)) revert MaciNotSet();
         if (isFinalized) revert RoundAlreadyFinalized();
         if (contributorCredits[_sender] != 0) revert AlreadyContributed();
         if (amount > MAX_VOICE_CREDITS * voiceCreditFactor) revert ContributionAmountTooLarge();
 
-        // Validate the proof of attendance if proof of attendance is provided
+        // Validate proof of attendance if provided
         if (_pA[0] != 0) {
             validateProofOfAttendance(_pA, _pB, _pC, _pubSignals);
             if (amount > maxContributionAmountForZupass) {
@@ -188,9 +201,8 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
     }
 
     /// @notice Distribute the tokens to the recipients
-    /// @notice Distribute the tokens to the recipients
-    /// @dev The "_sender" must be a pool manager and 
-    /// the allocation period must have ended
+    /// @dev The sender must be a pool manager and the allocation must have ended
+    /// @param data The data containing distribution details
     function _distribute(
         address[] memory /* _recipientIds */,
         bytes memory data,
@@ -211,48 +223,43 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         }
     }
 
-    /// @notice Distribute the funds to the recipients
+    /// @notice Distribute the funds to a recipient
     /// @param _claim The claim funds
     function _distributeFunds(bytes memory _claim) internal {
         claimFunds memory claim = abi.decode(_claim, (claimFunds));
 
         uint256 index = claim.voteOptionIndex;
-        address recipientId = recipientIndexToAddress[index];
+        address recipientId = recipientVoteIndexToAddress[index];
         Recipient memory recipient = _recipients[recipientId];
-
         uint256 amount = getAllocatedAmount(recipient.totalVotesReceived, claim.spent);
 
         verifyClaim(claim);
 
-        if (!_validateDistribution(index) || !_isAcceptedRecipient(recipientId) || amount == 0) {
+        if (!_validateDistribution(recipientId) || !_isAcceptedRecipient(recipientId) || amount == 0) {
             revert RECIPIENT_ERROR(recipientId);
         }
 
+        paidOut[recipientId] = true;
         IAllo.Pool memory pool = allo.getPool(poolId);
 
         _transferAmount(pool.token, recipientId, amount);
-
-        _setDistributed(index);
 
         emit Distributed(recipientId, recipient.recipientAddress, amount, address(0));
     }
 
     /// =======================================
-    /// ====== MACI related functions =========
+    /// ====== MACI Related Functions =========
     /// =======================================
 
-    /// @notice Register user for voting
-    /// @dev Only the MACI contract can register users
-    /// called after calling _allocation function in the
-    /// MACI contract using the SignUp function 
+    /// @notice Register a user for voting
+    /// @dev This function is part of the SignUpGatekeeper interface
     /// @param _data Encoded address of a contributor
-    function register(address /*_caller*/ , bytes memory _data) external view {
+    function register(address /* _caller */, bytes memory _data) external view {
         if (msg.sender != _maci) {
             revert OnlyMaciCanRegisterVoters();
         }
 
         address user = abi.decode(_data, (address));
-
         bool verified = contributorCredits[user] > 0;
 
         if (!verified) {
@@ -261,10 +268,10 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
     }
 
     /// @notice Add and verify tally results by batch
-    /// @param _voteOptionIndices Vote option indices
-    /// @param _tallyResults The results of vote tally for the recipients
-    /// @param _tallyResultProofs Proofs of correctness of the vote tally results
-    /// @param _tallyResultSalt The salt
+    /// @param _voteOptionIndices List of vote option indices
+    /// @param _tallyResults List of tally results
+    /// @param _tallyResultProofs List of tally result proofs
+    /// @param _tallyResultSalt Salt for the tally result
     /// @param _spentVoiceCreditsHashes Hash of spent voice credits
     /// @param _perVOSpentVoiceCreditsHashes Hash of per vote option spent voice credits
     function addTallyResultsBatch(
@@ -292,10 +299,10 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
     }
 
     /// @notice Add and verify tally votes and calculate sum of tally squares for alpha calculation
-    /// @param _voteOptionIndex Vote option index
-    /// @param _tallyResult The results of vote tally for the recipients
-    /// @param _tallyResultProof Proofs of correctness of the vote tally results
-    /// @param _tallyResultSalt The salt
+    /// @param _voteOptionIndex The vote option index
+    /// @param _tallyResult The result of the vote tally for the recipients
+    /// @param _tallyResultProof Proof of correctness of the vote tally result
+    /// @param _tallyResultSalt Salt for the tally result
     /// @param _spentVoiceCreditsHash Hash of spent voice credits
     /// @param _perVOSpentVoiceCreditsHash Hash of per vote option spent voice credits
     function _addTallyResult(
@@ -332,14 +339,14 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         emit TallyResultsAdded(_voteOptionIndex, _tallyResult);
     }
 
-    /// @notice Tally votes to a recipient
+    /// @notice Tally votes for a recipient
     /// @param _voteOptionIndex The vote option index
     /// @param _voiceCreditsToAllocate The voice credits to allocate
     function _tallyRecipientVotes(
         uint256 _voteOptionIndex,
         uint256 _voiceCreditsToAllocate
     ) internal {
-        address recipientId = recipientIndexToAddress[_voteOptionIndex];
+        address recipientId = recipientVoteIndexToAddress[_voteOptionIndex];
         Recipient storage recipient = _recipients[recipientId];
 
         if (recipient.tallyVerified) {
@@ -349,7 +356,6 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         recipient.tallyVerified = true;
 
         if (!_isAcceptedRecipient(recipientId)) return;
-
         if (_voiceCreditsToAllocate == 0) return;
 
         recipient.totalVotesReceived = _voiceCreditsToAllocate;
@@ -357,8 +363,8 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         emit TallyResultsAdded(_voteOptionIndex, _voiceCreditsToAllocate);
     }
 
-    /// @notice Publish the IPFS hash of the vote tally
-    /// @param _tallyHash IPFS hash of the vote tally
+    /// @notice Publish the IPFS hash of the vote tally. Only the coordinator can publish.
+    /// @param _tallyHash IPFS hash of the vote tally.
     function publishTallyHash(string calldata _tallyHash) external onlyCoordinator onlyAfterAllocation {
         if (isFinalized) {
             revert RoundAlreadyFinalized();
@@ -371,7 +377,7 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         emit TallyPublished(_tallyHash);
     }
 
-    /// @notice Finalize the results and allow recipients to claim funds
+    /// @notice Finalize the round
     /// @param _totalSpent Total amount of spent voice credits
     /// @param _totalSpentSalt The salt
     /// @param _newResultCommitment New result commitment
@@ -381,7 +387,7 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         uint256 _totalSpentSalt,
         uint256 _newResultCommitment,
         uint256 _perVOSpentVoiceCreditsHash
-    ) external onlyCoordinator onlyAfterAllocation {
+    ) external onlyPoolManager(msg.sender) onlyAfterAllocation {
         (, Tally tally) = getMaciContracts();
 
         if (isFinalized) {
@@ -411,14 +417,16 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         }
 
         totalSpent = _totalSpent;
+
         uint256 _poolAmount = _getBalance(allo.getPool(poolId).token, address(this));
         alpha = calcAlpha(_poolAmount, totalVotesSquares, _totalSpent);
         matchingPoolSize = _poolAmount - _totalSpent * voiceCreditFactor;
+
         isFinalized = true;
     }
 
-    /// @notice Claim allocated tokens
-    /// @param __claimFunds The claim funds
+    /// @notice Verify the claim for allocated tokens
+    /// @param __claimFunds The claim funds structure
     function verifyClaim(claimFunds memory __claimFunds) internal view {
         (Poll poll, Tally tally) = getMaciContracts();
 
@@ -439,37 +447,33 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         }
     }
 
-    /**
-    * @dev Reset tally results. This should only be used if the tally script
-    * failed to proveOnChain due to unexpected error processing MACI logs
-    */
+    /// @notice Reset the tally results
     function resetTally() external onlyCoordinator onlyAfterAllocation {
         if (isAddressZero(address(_maci))) revert MaciNotSet();
-        if (isFinalized) {
-            revert RoundAlreadyFinalized();
-        }
+        if (isFinalized) revert RoundAlreadyFinalized();
 
         (Poll poll, Tally tally) = getMaciContracts();
 
         address verifier = address(tally.verifier());
         address vkRegistry = address(tally.vkRegistry());
 
-        address mp = ClonableMACIFactory(maciFactory).deployMessageProcessor(verifier, vkRegistry, address(poll), coordinator);
-        address newTally = ClonableMACIFactory(maciFactory).deployTally(verifier, vkRegistry, address(poll), mp, coordinator);
-        
+        address mp = ClonableMACIFactory(maciFactory).deployMessageProcessor(verifier, vkRegistry, address(poll), coordinator, Mode.QV);
+        address newTally = ClonableMACIFactory(maciFactory).deployTally(verifier, vkRegistry, address(poll), mp, coordinator, Mode.QV);
+
         _pollContracts.tally = newTally;
         _pollContracts.messageProcessor = mp;
     }
 
     /// @notice Withdraw contributed funds for a list of contributors if the round has been cancelled
-    /// @param _contributors List of contributor addresses
-    /// @return result Array of results indicating success or failure of withdrawals
+    /// @param _contributors List of contributors
+    /// @return result List of boolean results indicating success or failure for each contributor
     function withdrawContributions(address[] memory _contributors) public returns (bool[] memory result) {
         if (!isCancelled) {
             revert RoundNotCancelled();
         }
 
         result = new bool[](_contributors.length);
+
         for (uint256 i = 0; i < _contributors.length; i++) {
             address contributor = _contributors[i];
             uint256 amount = contributorCredits[contributor] * voiceCreditFactor;
@@ -487,7 +491,7 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         }
     }
 
-    /// @notice Withdraw contributed funds by the caller
+    /// @notice Withdraw the contributed funds by the caller
     function withdrawContribution() external {
         address[] memory msgSender = new address[](1);
         msgSender[0] = msg.sender;
@@ -508,17 +512,19 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
     /// ==== Zupass Functions =====
     /// ===========================
 
-    /// @notice Validate event IDs
-    /// @param _pubSignals Public signals from the proof
+    /// @notice Validate the event IDs from the public signals
+    /// @param _pubSignals The public signals
     function validateEventIds(uint256[38] memory _pubSignals) internal view {
         uint256 numberOfValidEventIDs = getAmountOfValidEventIDsFromPublicSignals(_pubSignals);
         if (requiredValidEventIds > numberOfValidEventIDs) revert NotEnoughValidEventIDs();
     }
 
-    /// @notice Get the amount of valid event IDs from public signals
-    /// @param _pubSignals Public signals from the proof
+    /// @notice Get the amount of valid event IDs from the public signals
+    /// @param _pubSignals The public signals
     /// @return The number of valid event IDs
-    function getAmountOfValidEventIDsFromPublicSignals(uint256[38] memory _pubSignals) internal view returns (uint256) {
+    function getAmountOfValidEventIDsFromPublicSignals(
+        uint256[38] memory _pubSignals
+    ) internal view returns (uint256) {
         uint256 validEvents;
         for (uint256 i = 0; i < VALID_EVENT_IDS.length(); i++) {
             uint256 currEvent = _pubSignals[15 + i];
@@ -529,25 +535,25 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         return validEvents;
     }
 
-    /// @notice Validate the signer of the proof
-    /// @param _pubSignals Public signals from the proof
+    /// @notice Validate the signer from the public signals
+    /// @param _pubSignals The public signals
     function validateSigner(uint256[38] memory _pubSignals) internal pure {
         uint256[2] memory signer = [_pubSignals[13], _pubSignals[14]];
         if (signer[0] != ZUPASS_SIGNER_G1 || signer[1] != ZUPASS_SIGNER_G2) revert InvalidSigner();
     }
 
     /// @notice Validate proof of attendance
-    /// @param _pA Proof A
-    /// @param _pB Proof B
-    /// @param _pC Proof C
-    /// @param _pubSignals Public signals from the proof
+    /// @param _pA Proof part A
+    /// @param _pB Proof part B
+    /// @param _pC Proof part C
+    /// @param _pubSignals The public signals
     function validateProofOfAttendance(
-        uint256[2] memory _pA,
-        uint256[2][2] memory _pB,
-        uint256[2] memory _pC,
-        uint256[38] memory _pubSignals
+        uint[2] memory _pA,
+        uint[2][2] memory _pB,
+        uint[2] memory _pC,
+        uint[38] memory _pubSignals
     ) internal {
-        if (!zuPassVerifier.verifyProof(_pA, _pB, _pC, _pubSignals)) {
+        if (!zupassVerifier.verifyProof(_pA, _pB, _pC, _pubSignals)) {
             revert InvalidProof();
         }
 
@@ -555,12 +561,14 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
         validateSigner(_pubSignals);
 
         uint256 publicSignalsHash = _pubSignals[9];
+
         if (usedPublicSignals[publicSignalsHash]) revert AlreadyUsedZupass();
+
         usedPublicSignals[publicSignalsHash] = true;
     }
 
     /// @notice Get the whitelisted events
-    /// @return Array of whitelisted events
+    /// @return List of whitelisted event IDs
     function getWhitelistedEvents() external view returns (uint256[] memory) {
         return VALID_EVENT_IDS.values();
     }
@@ -569,7 +577,7 @@ contract MACIQF is MACIQFBase, DomainObjs, Params {
     /// ==== Util Functions =====
     /// =========================
 
-    /// @notice Check if an address is zero
+    /// @notice Check if the given address is zero
     /// @param _address The address to check
     /// @return True if the address is zero, otherwise false
     function isAddressZero(address _address) internal pure returns (bool) {

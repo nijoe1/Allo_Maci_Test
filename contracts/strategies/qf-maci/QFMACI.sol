@@ -126,7 +126,8 @@ contract QFMACI is QFMACIBase, DomainObjs, Params {
 
         _pollContracts = ClonableMACI(_maci).deployPoll(
             _pollDuration,
-            _params.maciParams.coordinatorPubKey
+            _params.maciParams.coordinatorPubKey,
+            DomainObjs.Mode.QV
         );
 
         maciFactory = _params.maciParams.maciFactory;
@@ -455,8 +456,8 @@ contract QFMACI is QFMACIBase, DomainObjs, Params {
         address verifier = address(tally.verifier());
         address vkRegistry = address(tally.vkRegistry());
 
-        address mp = ClonableMACIFactory(maciFactory).deployMessageProcessor(verifier, vkRegistry, address(poll), coordinator);
-        address newTally = ClonableMACIFactory(maciFactory).deployTally(verifier, vkRegistry, address(poll), mp, coordinator);
+        address mp = ClonableMACIFactory(maciFactory).deployMessageProcessor(verifier, vkRegistry, address(poll), coordinator, DomainObjs.Mode.QV);
+        address newTally = ClonableMACIFactory(maciFactory).deployTally(verifier, vkRegistry, address(poll), mp, coordinator, DomainObjs.Mode.QV);
         
         _pollContracts.tally = newTally;
         _pollContracts.messageProcessor = mp;
