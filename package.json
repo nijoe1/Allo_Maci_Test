@@ -17,8 +17,9 @@
     "chai": "^4.4.1",
     "hardhat": "^2.22.4",
     "ipfs-only-hash": "^4.0.0",
-    "maci-cli": "^1.2.2",
-    "maci-contracts": "^1.2.2",
+    "maci-cli": "^1.2.3",
+    "maci-contracts": "^1.2.3",
+    "maci-domainobjs": "^1.2.3",
     "typescript": "^5.4.5"
   }
 }

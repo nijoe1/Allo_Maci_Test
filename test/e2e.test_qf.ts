@@ -10,7 +10,6 @@ import { genTreeCommitment as genTallyResultCommitment } from "maci-crypto";
 
 import {
   addTallyResultsBatch,
-  bnSqrt,
   getRecipientClaimData,
   mergeMaciSubtrees,
   prepareAllocationData,
@@ -18,6 +17,8 @@ import {
   buildUpdatedRowsOfApplicationStatuses,
   applicationStatusToNumber,
 } from "./utils/maci";
+
+import { bnSqrt } from "./utils/math";
 
 import { getCircuitFiles } from "./utils/circuits";
 
@@ -81,11 +82,10 @@ describe("e2e", function test() {
 
   const random = Math.floor(Math.random() * 10 ** 8);
 
-  let recipientAddress1 : string;
+  let recipientAddress1: string;
   let recipientAddress2: string;
   let outputDir: string;
   let maciAddress: string;
-  let types;
 
   before(async () => {
     [Coordinator] = await ethers.getSigners();
@@ -117,68 +117,30 @@ describe("e2e", function test() {
   });
 
   it("Should Register Recipients and Review them", async () => {
-
-    console.log( "Recipient Index");
-  }); 
+    console.log("Recipient Index");
+  });
 
   it("Should allow the contribution to gain tokens and allocate", async () => {
-    // const getDAI1 = await DAI.connect(allocator).mint(
-    //   await allocator.getAddress(),
-    //   1000n * UNIT
-    // );
-    // await getDAI1.wait();
-    // const getDAI2 = await DAI.connect(recipient1).mint(
-    //   await recipient1.getAddress(),
-    //   1000n * UNIT
-    // );
-    // await getDAI2.wait();
-
-    // const approveDAI1 = await DAI.connect(allocator).approve(
-    //   await QFMACIStrategy.getAddress(),
-    //   1000n * UNIT
-    // );
-    // await approveDAI1.wait();
-    // const approveDAI2 = await DAI.connect(recipient1).approve(
-    //   await QFMACIStrategy.getAddress(),
-    //   1000n * UNIT
-    // );
-    // await approveDAI2.wait();
-
-    // const approveDAI3 = await DAI.connect(allocator).approve(
-    //   await AlloContract.getAddress(),
-    //   1000n * UNIT
-    // );
-    // await approveDAI3.wait();
-
-    // // FundPOOL
-    // const fundPool = await AlloContract.connect(allocator).fundPool(
-    //   1,
-    //   500n * UNIT
-    // );
-    // await fundPool.wait();
-
     // Donate to the pool without proof
     let dt = {
       _pa: new Array(2).fill(0n),
-      _pb: [
-        new Array(2).fill(0n),
-        new Array(2).fill(0n),
-      ],
+      _pb: [new Array(2).fill(0n), new Array(2).fill(0n)],
       _pc: new Array(2).fill(0n),
-      _pubSignals: new Array(38).fill("0")
+      _pubSignals: new Array(38).fill("0"),
     };
-    // convert yo BigInt[]
 
-    const contributeEncodedData1 = await prepareAllocationData({
+    const emptyProof = {
+      pA: dt._pa,
+      pB: dt._pb,
+      pC: dt._pc,
+      pubSignals: dt._pubSignals.map((x) => BigInt(x)),
+    };
+
+    const contributeEncodedData1 = (await prepareAllocationData({
       publicKey: keypair.pubKey.serialize(),
       amount: CONTRIBUTION_AMOUNT1,
-      proof: {
-        pA: dt._pa,
-        pB: dt._pb,
-        pC: dt._pc,
-        pubSignals: dt._pubSignals.map((x) => BigInt(x)),
-      },
-    }) as string;
+      proof: emptyProof,
+    })) as string;
     // signup2
 
     const SignUpTx1 = await AlloContract.connect(allocator).allocate(
@@ -188,16 +150,11 @@ describe("e2e", function test() {
     );
     await SignUpTx1.wait();
 
-    const contributeEncodedData2 = await prepareAllocationData({
+    const contributeEncodedData2 = (await prepareAllocationData({
       publicKey: keypair2.pubKey.serialize(),
       amount: CONTRIBUTION_AMOUNT2,
-      proof: {
-        pA: [0n, dt._pa[1]],
-        pB: dt._pb,
-        pC: dt._pc,
-        pubSignals: dt._pubSignals.map((x) => BigInt(x)),
-      },
-    }) as string;
+      proof: emptyProof,
+    })) as string;
 
     // signup2
     const SignUpTx2 = await AlloContract.connect(recipient1).allocate(
@@ -230,25 +187,9 @@ describe("e2e", function test() {
     ).registerRecipient(1n, data);
     await RecipientRegistrationTx2.wait();
 
-    console.log(
-      "Recipient Index",
-      await QFMACIStrategy.recipientToStatusIndexes(recipientAddress1)
-    );
-    console.log(
-      "Recipient Index",
-      await QFMACIStrategy.recipientToStatusIndexes(recipientAddress2)
-    );
-
-    console.log(
-      "recipient statys",
-      await QFMACIStrategy._isAcceptedRecipient(recipientAddress1)
-    );
-
-    // Review Acccept recipient
-    let status = 2; // Accepted
-
-    const totalApplications =
-      await QFMACIStrategy.connect(Coordinator).recipientsCounter();
+    const totalApplications = await QFMACIStrategy.connect(
+      Coordinator
+    ).recipientsCounter();
 
     const rows = buildUpdatedRowsOfApplicationStatuses({
       applicationsToUpdate: [
@@ -275,45 +216,26 @@ describe("e2e", function test() {
       bitsPerStatus: 4,
     });
 
-    console.log("Rows", rows);
-    console.log("Total Applications", totalApplications);
-
     const reviewRecipientsTx = await QFMACIStrategy.connect(
       Coordinator
     ).reviewRecipients(rows, totalApplications);
 
     await reviewRecipientsTx.wait();
-
-    console.log(
-      "recipient statys",
-      await QFMACIStrategy._isAcceptedRecipient(recipientAddress1)
-    );
-
-    console.log(
-      "recipient statys",
-      await QFMACIStrategy._isAcceptedRecipient(recipientAddress2)
-    );
-    console.log(
-      "recipient statys",
-      await QFMACIStrategy.statusesBitMap(0)
-    );
-    
   });
 
   it("Should allow the Contributors to vote", async () => {
     // create 1 vote message for the recipient1
     const votingOption1 =
-      await QFMACIStrategy.connect(Coordinator).recipientToStatusIndexes(
+      (await QFMACIStrategy.connect(Coordinator).recipientToStatusIndexes(
         recipientAddress1
-      ) - 1n;
+      )) - 1n;
 
     // create 1 vote message for the recipient1
     const votingOption2 =
-      await QFMACIStrategy.connect(Coordinator).recipientToStatusIndexes(
+      (await QFMACIStrategy.connect(Coordinator).recipientToStatusIndexes(
         recipientAddress2
-      ) - 1n;
+      )) - 1n;
 
-    console.log(recipientAddress1, recipientAddress2);
     // When submitting to the same vote index, the last vote weight will be the final vote weight
     // When voting weight is 5 that means that the circouts will calculate the square of the weight so 5^2 = 25
     // BUt the final vote weight will be 5
@@ -340,7 +262,7 @@ describe("e2e", function test() {
       signer: allocator,
     });
 
-    let res = await publishBatch({
+    await publishBatch({
       messages: [
         {
           stateIndex: 2n,
@@ -439,8 +361,9 @@ describe("e2e", function test() {
     const tally = JSONFile.read(tallyFile) as any;
     const tallyHash = await getIpfsHash(tally);
 
-    let publishTallyHashReceipt =
-      await QFMACIStrategy.connect(Coordinator).publishTallyHash(tallyHash);
+    let publishTallyHashReceipt = await QFMACIStrategy.connect(
+      Coordinator
+    ).publishTallyHash(tallyHash);
 
     await publishTallyHashReceipt.wait();
 
@@ -522,9 +445,10 @@ describe("e2e", function test() {
 
     const recipientTreeDepth = voteOptionTreeDepth;
 
-    const recipientIndex1 = await QFMACIStrategy.recipientToStatusIndexes(
-      await recipient1.getAddress()
-    ) - 1n;
+    const recipientIndex1 =
+      (await QFMACIStrategy.recipientToStatusIndexes(
+        await recipient1.getAddress()
+      )) - 1n;
 
     const distributeData1 = getRecipientClaimData(
       Number(recipientIndex1),
@@ -536,9 +460,9 @@ describe("e2e", function test() {
 
     const distributeData2 = getRecipientClaimData(
       Number(
-        await QFMACIStrategy.recipientToStatusIndexes(
+        (await QFMACIStrategy.recipientToStatusIndexes(
           await recipient2.getAddress()
-        ) - 1n
+        )) - 1n
       ),
       recipientTreeDepth,
       tally
@@ -563,26 +487,12 @@ describe("e2e", function test() {
       await QFMACIStrategy.getPoolAmount()
     );
 
-    // Calculate DAI balance
-    console.log(
-      "Pool DAI Balance Before Distribution is :",
-      await DAI.balanceOf(await QFMACIStrategy.getAddress())
-    );
-
     const recipient1Balance = await ethers.provider.getBalance(
       await recipient1.getAddress()
     );
     const recipient2Balance = await ethers.provider.getBalance(
       await recipient2.getAddress()
     );
-
-    // Calculate DAI balance
-    // const recipient1Balance = await DAI.balanceOf(
-    //   await recipient1.getAddress()
-    // );
-    // const recipient2Balance = await DAI.balanceOf(
-    //   await recipient2.getAddress()
-    // );
 
     let distributeFunds = await AlloContract.connect(Coordinator).distribute(
       1,
@@ -598,31 +508,6 @@ describe("e2e", function test() {
       await recipient2.getAddress()
     );
 
-    // Calculate DAI balance
-    // const recipient1BalanceAfterDistribution = await DAI.balanceOf(
-    //   await recipient1.getAddress()
-    // );
-    // const recipient2BalanceAfterDistribution = await DAI.balanceOf(
-    //   await recipient2.getAddress()
-    // );
-
-    // console.log(
-    //   "Recipient 1 balance before Distribution: ",
-    //   recipient1Balance,
-    //   " & After : ",
-    //   recipient1BalanceAfterDistribution,
-    //   " & Difference: ",
-    //   Number(recipient1BalanceAfterDistribution - recipient1Balance) / 10 ** 18
-    // );
-    // console.log(
-    //   "Recipient 2 balance before Distribution: ",
-    //   recipient2Balance,
-    //   " & After : ",
-    //   recipient2BalanceAfterDistribution,
-    //   " & Difference: ",
-    //   Number(recipient2BalanceAfterDistribution - recipient2Balance) / 10 ** 18
-    // );
-
     expect(recipient1BalanceAfterDistribution).to.be.greaterThan(
       recipient1Balance
     );
@@ -633,12 +518,6 @@ describe("e2e", function test() {
     console.log(
       "Pool Balance After Distribution",
       await ethers.provider.getBalance(await QFMACIStrategy.getAddress())
-    );
-
-    // Calculate DAI balance
-    console.log(
-      "Pool DAI Balance After Distribution",
-      await DAI.balanceOf(await QFMACIStrategy.getAddress())
     );
   });
 });

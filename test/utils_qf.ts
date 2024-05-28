@@ -110,14 +110,9 @@ export const deployAlloContracts = async () => {
 export const deployTestContracts = async (): Promise<ITestContracts> => {
   const deployParams = await MaciParameters.mock2();
 
-  // console.log(deployParams);
-
   const signer = new ethers.Wallet(PRIVATE_KEY!, ethers.provider);
 
-  // console.log("Signer : ", signer.address);
-
   const AlloContracts = await deployAlloContracts();
-  console.log(AlloContracts);
 
   const verifierContract = await deployVerifier(undefined, true);
   const vkRegistryContract = await deployVkRegistry(undefined, true);
@@ -144,14 +139,7 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
     poseidonT6,
   }));
 
-  // console.log(poseidonAddrs);
-
-
-  const AlloRegistry = AlloContracts.RegistryAddress;
   const Allo = AlloContracts.AlloAddress;
-  const DAI = await ethers.getContractFactory("dai");
-  const DAI_INSTANCE = DAI.attach(AlloContracts.DaiAddress);
-
 
   const pollFactoryContract = await ethers.getContractFactory("ClonablePoll",
     {
@@ -191,13 +179,6 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
   ).then((factory) => factory.deploy()
   
   );
-
-
-
-
-
-
-
 
   const [pollAddr, mpAddr, tallyAddr] = await Promise.all([
     pollFactoryContract.getAddress(),
@@ -272,8 +253,6 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
 
   await addStrategy.wait();
 
-  console.log("Strategy added to Allo allowed strategies");
-
   const createProfile = await AlloContracts.Registry.createProfile(
     0,
     "Test",
@@ -345,8 +324,6 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
   let AbiCoder = new ethers.AbiCoder();
 
   let bytes = AbiCoder.encode(types, [initStruct]);
-
-  console.log("Bytes : ", bytes);
 
   const createPool = await AlloContracts.Allo.createPool(
     profileId,
