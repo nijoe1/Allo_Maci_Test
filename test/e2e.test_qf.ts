@@ -45,9 +45,13 @@ import { getTalyFilePath } from "./utils/misc";
 import path from "path";
 
 // MACI zkFiles
-const circuitDirectory = process.env.CIRCUIT_DIRECTORY || "./zkeys/zkeys";
+let circuitDirectory = process.env.CIRCUIT_DIRECTORY || "./zkeys/zkeys";
 const proofOutputDirectory = process.env.PROOF_OUTPUT_DIR || "./proof_output";
 const tallyBatchSize = Number(process.env.TALLY_BATCH_SIZE || 8);
+
+if (!existsSync(circuitDirectory)) {
+  circuitDirectory = "../../zkeys/zkeys";
+}
 
 const voteOptionTreeDepth = 3;
 
@@ -114,10 +118,6 @@ describe("e2e", function test() {
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true });
     }
-  });
-
-  it("Should Register Recipients and Review them", async () => {
-    console.log("Recipient Index");
   });
 
   it("Should allow the contribution to gain tokens and allocate", async () => {
@@ -355,6 +355,7 @@ describe("e2e", function test() {
 
     console.log("finished proveOnChain");
   });
+
   it("Should Publish Tally Hash", async () => {
     const tallyFile = getTalyFilePath(outputDir);
 
@@ -389,6 +390,7 @@ describe("e2e", function test() {
 
     console.log("Finished adding tally results");
   });
+  
 
   it("Recipient should have more than 0 votes received", async () => {
     let recipientAddress = await recipient1.getAddress();

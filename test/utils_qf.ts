@@ -70,11 +70,7 @@ export const deployAlloContracts = async () => {
   // console.log("Registry deployed at : ", registryAddress);
 
   const AlloFactory = await ethers.getContractFactory("Allo");
-  // address _owner,
-  // address _registry,
-  // address payable _treasury,
-  // uint256 _percentFee,
-  // uint256 _baseFee
+
   const Allo = await upgrades.deployProxy(AlloFactory, [
     signer.address,
     registryAddress,
@@ -349,8 +345,6 @@ export const deployTestContracts = async (): Promise<ITestContracts> => {
   const deployTime = block!.timestamp;
 
   const poolAddress = (await AlloContracts.Allo.getPool(1)).strategy;
-
-  console.log("Pool Address : ", poolAddress);
 
   const QFMACI_STRATEGY = await ethers.getContractAt("QFMACI", poolAddress);
 
